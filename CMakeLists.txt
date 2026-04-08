@@ -7,3 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(HelloWorld src/main.cpp)
+
+target_compile_options(HelloWorld PRIVATE -O3 -g -fno-omit-frame-pointer)
+target_link_libraries(HelloWorld PRIVATE pthread)
