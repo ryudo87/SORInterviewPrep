@@ -1,69 +1,48 @@
-#include <atomic>
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <iomanip>
 #include <iostream>
-#include <thread>
 #include <vector>
+using namespace std;
 
-namespace {
-
-constexpr std::size_t kIterations = 30'000'000;
-
-struct UnpaddedCounter {
-    std::atomic<std::uint64_t> value{0};
-};
-
-struct alignas(64) PaddedCounter {
-    std::atomic<std::uint64_t> value{0};
-    std::byte pad[64 - sizeof(std::atomic<std::uint64_t>)]{};
-};
-
-template <typename Counter>
-double run_benchmark(std::size_t num_threads) {
-    std::vector<Counter> counters(num_threads);
-    std::vector<std::thread> workers;
-    workers.reserve(num_threads);
-
-    const auto start = std::chrono::steady_clock::now();
-
-    for (std::size_t i = 0; i < num_threads; ++i) {
-        workers.emplace_back([&, i]() {
-            for (std::size_t n = 0; n < kIterations; ++n) {
-                counters[i].value.fetch_add(1, std::memory_order_relaxed);
-            }
-        });
+//A) if constexpr
+template <typename T>
+void printKind(const T& x) {
+    if constexpr (std::is_integral_v<T>) {
+        std::cout << "integral: " << x << "\n";
+    } else {
+        std::cout << "non-integral\n";
     }
-
-    for (auto& t : workers) {
-        t.join();
-    }
-
-    const auto end = std::chrono::steady_clock::now();
-    return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-} // namespace
+//B) fold expressions
+//Elegant variadic template reduction.
+template <typename... Args>
+auto sum(Args... args) {
+    return (args + ...); // unary right fold
+}
+
+//C) template specialization
+template <auto N>
+struct ConstValue {
+    static constexpr auto value = N;
+};
+
+template <typename T>
+inline constexpr bool is_int_v = std::is_same_v<T, int>;
+
+// What is SFINAE? SFINAE stands for "Substitution Failure Is Not An Error". 
+// It is a C++ template metaprogramming technique that allows the compiler to 
+// ignore certain template instantiations that fail during substitution, 
+// rather than treating them as errors. 
+
+//D) SFINAE example
+template <typename T>
+typename std::enable_if<std::is_integral_v<T>, void>::type
+process(T x) {
+    std::cout << "Processing integral: " << x << "\n";
+}
+
 
 int main() {
-    const std::size_t thread_count = std::max(2u, std::thread::hardware_concurrency());
-
-    std::cout << "False sharing demo\n";
-    std::cout << "threads=" << thread_count
-              << " iterations_per_thread=" << kIterations << "\n";
-    std::cout << "sizeof(UnpaddedCounter)=" << sizeof(UnpaddedCounter)
-              << " sizeof(PaddedCounter)=" << sizeof(PaddedCounter) << "\n\n";
-
-    const double unpadded_ms = run_benchmark<UnpaddedCounter>(thread_count);
-    const double padded_ms = run_benchmark<PaddedCounter>(thread_count);
-
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "Unpadded time (likely false sharing): " << unpadded_ms << " ms\n";
-    std::cout << "Padded time (sharing avoided):       " << padded_ms << " ms\n";
-    if (padded_ms > 0.0) {
-        std::cout << "Speedup from padding:               " << (unpadded_ms / padded_ms) << "x\n";
-    }
-
+    std::cout << "ConstValue<>::value = " << ConstValue<33>::value << "\n";
+    std::cout << "is_int_v<int> = " << is_int_v<int> << "\n";
     return 0;
 }
